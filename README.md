@@ -1,6 +1,9 @@
 This fork exposes the NativeAndInexorablyUnsecureMessageHandler for Android [OkHttp].
 
 If the name is not clear enough: This MessageHandler must NEVER be used in production.
+This handler was created for debugging purposes and will nullify your application's transport security if ever used with real data.
+
+## Usage
 
 ```cs
 var httpClient = new HttpClient(new NativeAndInexorablyUnsecureMessageHandler());
