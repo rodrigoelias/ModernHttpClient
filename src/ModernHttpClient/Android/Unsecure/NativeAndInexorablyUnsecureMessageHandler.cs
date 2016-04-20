@@ -10,29 +10,27 @@ using Javax.Net.Ssl;
 using System.Text.RegularExpressions;
 using Java.IO;
 using System.Security.Cryptography.X509Certificates;
-using System.Globalization;
-using Android.OS;
 
-namespace ModernHttpClient
+namespace ModernHttpClient.Unsecure
 {
-    public class NativeMessageHandler : HttpClientHandler
+    public class NativeAndInexorablyUnsecureMessageHandler : HttpClientHandler
     {
-        readonly OkHttpClient client = new OkHttpClient();
+        readonly OkHttpClient client = SSLManager.GetHttpClient();
         readonly CacheControl noCacheCacheControl = default(CacheControl);
         readonly bool throwOnCaptiveNetwork;
 
         readonly Dictionary<HttpRequestMessage, WeakReference> registeredProgressCallbacks =
             new Dictionary<HttpRequestMessage, WeakReference>();
-        readonly Dictionary<string, string> headerSeparators = 
-            new Dictionary<string,string>(){ 
+        readonly Dictionary<string, string> headerSeparators =
+            new Dictionary<string, string>(){
                 {"User-Agent", " "}
             };
 
         public bool DisableCaching { get; set; }
 
-        public NativeMessageHandler() : this(false, false) {}
+        public NativeAndInexorablyUnsecureMessageHandler() : this(false, false) { }
 
-        public NativeMessageHandler(bool throwOnCaptiveNetwork, bool customSSLVerification, NativeCookieHandler cookieHandler = null)
+        public NativeAndInexorablyUnsecureMessageHandler(bool throwOnCaptiveNetwork, bool customSSLVerification, NativeCookieHandler cookieHandler = null)
         {
             this.throwOnCaptiveNetwork = throwOnCaptiveNetwork;
 
@@ -42,7 +40,8 @@ namespace ModernHttpClient
 
         public void RegisterForProgress(HttpRequestMessage request, ProgressDelegate callback)
         {
-            if (callback == null && registeredProgressCallbacks.ContainsKey(request)) {
+            if (callback == null && registeredProgressCallbacks.ContainsKey(request))
+            {
                 registeredProgressCallbacks.Remove(request);
                 return;
             }
@@ -54,7 +53,8 @@ namespace ModernHttpClient
         {
             ProgressDelegate emptyDelegate = delegate { };
 
-            lock (registeredProgressCallbacks) {
+            lock (registeredProgressCallbacks)
+            {
                 if (!registeredProgressCallbacks.ContainsKey(request)) return emptyDelegate;
 
                 var weakRef = registeredProgressCallbacks[request];
@@ -70,7 +70,8 @@ namespace ModernHttpClient
 
         string getHeaderSeparator(string name)
         {
-            if (headerSeparators.ContainsKey(name)) {
+            if (headerSeparators.ContainsKey(name))
+            {
                 return headerSeparators[name];
             }
 
@@ -83,11 +84,13 @@ namespace ModernHttpClient
             var url = new Java.Net.URL(java_uri);
 
             var body = default(RequestBody);
-            if (request.Content != null) {
+            if (request.Content != null)
+            {
                 var bytes = await request.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
 
                 var contentType = "text/plain";
-                if (request.Content.Headers.ContentType != null) {
+                if (request.Content.Headers.ContentType != null)
+                {
                     contentType = String.Join(" ", request.Content.Headers.GetValues("Content-Type"));
                 }
                 body = RequestBody.Create(MediaType.Parse(contentType), bytes);
@@ -97,7 +100,8 @@ namespace ModernHttpClient
                 .Method(request.Method.Method.ToUpperInvariant(), body)
                 .Url(url);
 
-            if (DisableCaching) {
+            if (DisableCaching)
+            {
                 builder.CacheControl(noCacheCacheControl);
             }
 
@@ -117,18 +121,24 @@ namespace ModernHttpClient
             cancellationToken.Register(() => Task.Run(() => call.Cancel()));
 
             var resp = default(Response);
-            try {
+            try
+            {
                 resp = await call.EnqueueAsync().ConfigureAwait(false);
                 var newReq = resp.Request();
                 var newUri = newReq == null ? null : newReq.Uri();
                 request.RequestUri = new Uri(newUri.ToString());
-                if (throwOnCaptiveNetwork && newUri != null) {
-                    if (url.Host != newUri.Host) {
+                if (throwOnCaptiveNetwork && newUri != null)
+                {
+                    if (url.Host != newUri.Host)
+                    {
                         throw new CaptiveNetworkException(new Uri(java_uri), new Uri(newUri.ToString()));
                     }
                 }
-            } catch (IOException ex) {
-                if (ex.Message.ToLowerInvariant().Contains("canceled")) {
+            }
+            catch (IOException ex)
+            {
+                if (ex.Message.ToLowerInvariant().Contains("canceled"))
+                {
                     throw new System.OperationCanceledException();
                 }
 
@@ -142,16 +152,20 @@ namespace ModernHttpClient
             var ret = new HttpResponseMessage((HttpStatusCode)resp.Code());
             ret.RequestMessage = request;
             ret.ReasonPhrase = resp.Message();
-            if (respBody != null) {
+            if (respBody != null)
+            {
                 var content = new ProgressStreamContent(respBody.ByteStream(), CancellationToken.None);
                 content.Progress = getAndRemoveCallbackFromRegister(request);
                 ret.Content = content;
-            } else {
+            }
+            else
+            {
                 ret.Content = new ByteArrayContent(new byte[0]);
             }
 
             var respHeaders = resp.Headers();
-            foreach (var k in respHeaders.Names()) {
+            foreach (var k in respHeaders.Names())
+            {
                 ret.Headers.TryAddWithoutValidation(k, respHeaders.Get(k));
                 ret.Content.Headers.TryAddWithoutValidation(k, respHeaders.Get(k));
             }
@@ -160,9 +174,9 @@ namespace ModernHttpClient
         }
     }
 
-    public static class AwaitableOkHttp
+    static class AwaitableOkHttp
     {
-        public static Task<Response> EnqueueAsync(this Call This)
+        static Task<Response> EnqueueAsync(this Call This)
         {
             var cb = new OkTaskCallback();
             This.Enqueue(cb);
@@ -178,9 +192,12 @@ namespace ModernHttpClient
             public void OnFailure(Request p0, Java.IO.IOException p1)
             {
                 // Kind of a hack, but the simplest way to find out that server cert. validation failed
-                if (p1.Message == String.Format("Hostname '{0}' was not verified", p0.Url().Host)) {
+                if (p1.Message == String.Format("Hostname '{0}' was not verified", p0.Url().Host))
+                {
                     tcs.TrySetException(new WebException(p1.LocalizedMessage, WebExceptionStatus.TrustFailure));
-                } else {
+                }
+                else
+                {
                     tcs.TrySetException(p1);
                 }
             }
@@ -221,19 +238,22 @@ namespace ModernHttpClient
             var errors = System.Net.Security.SslPolicyErrors.None;
 
             // Build certificate chain and check for errors
-            if (certificates == null || certificates.Length == 0) {//no cert at all
+            if (certificates == null || certificates.Length == 0)
+            {//no cert at all
                 errors = System.Net.Security.SslPolicyErrors.RemoteCertificateNotAvailable;
                 goto bail;
-            } 
+            }
 
-            if (certificates.Length == 1) {//no root?
+            if (certificates.Length == 1)
+            {//no root?
                 errors = System.Net.Security.SslPolicyErrors.RemoteCertificateChainErrors;
                 goto bail;
-            } 
+            }
 
             var netCerts = certificates.Select(x => new X509Certificate2(x.GetEncoded())).ToArray();
 
-            for (int i = 1; i < netCerts.Length; i++) {
+            for (int i = 1; i < netCerts.Length; i++)
+            {
                 chain.ChainPolicy.ExtraStore.Add(netCerts[i]);
             }
 
@@ -244,7 +264,8 @@ namespace ModernHttpClient
             chain.ChainPolicy.UrlRetrievalTimeout = new TimeSpan(0, 1, 0);
             chain.ChainPolicy.VerificationFlags = X509VerificationFlags.AllowUnknownCertificateAuthority;
 
-            if (!chain.Build(root)) {
+            if (!chain.Build(root))
+            {
                 errors = System.Net.Security.SslPolicyErrors.RemoteCertificateChainErrors;
                 goto bail;
             }
@@ -252,7 +273,8 @@ namespace ModernHttpClient
             var subject = root.Subject;
             var subjectCn = cnRegex.Match(subject).Groups[1].Value;
 
-            if (String.IsNullOrWhiteSpace(subjectCn) || !Utility.MatchHostnameToPattern(hostname, subjectCn)) {
+            if (String.IsNullOrWhiteSpace(subjectCn) || !Utility.MatchHostnameToPattern(hostname, subjectCn))
+            {
                 errors = System.Net.Security.SslPolicyErrors.RemoteCertificateNameMismatch;
                 goto bail;
             }

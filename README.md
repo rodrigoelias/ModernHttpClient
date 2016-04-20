@@ -1,3 +1,11 @@
+This fork exposes the NativeAndInexorablyUnsecureMessageHandler for Android [OkHttp].
+
+If the name is not clear enough: This MessageHandler must NEVER be used in production.
+
+```cs
+var httpClient = new HttpClient(new NativeAndInexorablyUnsecureMessageHandler());
+```
+
 ModernHttpClient
 ================
 
